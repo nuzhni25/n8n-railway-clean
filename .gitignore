@@ -1,0 +1,5 @@
+# Ignore everything not needed
+database.sqlite
+database.zip
+*.sqlite
+*.zip
