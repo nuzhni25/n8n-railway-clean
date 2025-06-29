@@ -8,6 +8,6 @@ echo "📂 Unzipping to /data..."
 mkdir -p /data
 unzip -o /app/database.zip -d /data
 
-echo "🚀 Launching n8n!...."
-n8n
+echo "🚀 Launching n8n..."
+exec n8n
 
