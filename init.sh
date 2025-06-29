@@ -1,6 +1,8 @@
 #!/bin/sh
 
-echo "Fetching database from remote URL..."
-curl -L "https://limewire.com/d/H3IAh#BRCTO77IFt" --output /data/database.sqlite
-echo "Done fetching database!"
+echo "🔁 Fetching database from Dropbox..."
+wget -O /data/database.sqlite "https://dl.dropboxusercontent.com/scl/fi/e1lc8a52t6fv3d86mlwp1/database.sqlite?rlkey=t6t3941pudg4vp0p1h363dcgi&dl=1"
+
+echo "✅ Done fetching database!"
+exec tini -- /app/n8n "$@"
 
