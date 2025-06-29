@@ -10,3 +10,5 @@ unzip -o /app/database.zip -d /data
 
 echo "🚀 Launching n8n..."
 n8n
+# dummy change to force commit
+
