@@ -7,5 +7,5 @@ RUN apk add --no-cache wget
 COPY init.sh /init.sh
 RUN chmod +x /init.sh
 
-CMD ["/init.sh"]
+ENTRYPOINT ["/init.sh"]
 
