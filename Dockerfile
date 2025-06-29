@@ -1,9 +1,13 @@
-FROM n8nio/n8n:latest
+# Базовый образ n8n slim
+FROM n8nio/n8n:1.45.1-slim
 
-# Копируем init.sh внутрь контейнера
+# Установка curl
+RUN apt-get update && apt-get install -y curl && apt-get clean
+
+# Копируем init.sh
 COPY init.sh /init.sh
-RUN chmod +x /init.sh
 
-# Запускаем скрипт при старте контейнера
-CMD ["/bin/sh", "/init.sh"]
+# Указываем запуск скрипта на старте
+ENTRYPOINT ["/bin/sh", "/init.sh"]
+CMD ["n8n"]
 

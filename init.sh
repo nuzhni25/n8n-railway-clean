@@ -1,8 +1,5 @@
 #!/bin/sh
-
-echo "⬇️ Скачиваем базу данных..."
-curl -L "https://files.fm/u/9kq79ka5us" -o /data/database.sqlite
-
-echo "✅ Файл скачан. Запускаем n8n..."
-exec n8n
+echo "Fetching database from remote URL..."
+curl -L "https://limewire.com/d/H3IAh#BRCTO77IFt" --output /data/database.sqlite
+echo "Done fetching database!"
 
