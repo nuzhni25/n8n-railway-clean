@@ -1,11 +1,8 @@
 FROM n8nio/n8n
 
-# Копируем init.sh внутрь
-COPY init.sh /init.sh
+# Копируем init.sh внутрь образа
+COPY init.sh /app/init.sh
 
-# Устанавливаем права на выполнение
-RUN chmod +x /init.sh
-
-# Запускаем через bash — это надёжно
+# Указываем bash напрямую — не нужны права на выполнение
 CMD ["bash", "/app/init.sh"]
 
