@@ -1,47 +1,29 @@
-FROM n8nio/n8n
+FROM n8nio/n8n:latest
 
-# Устанавливаем переменную для правильных прав доступа к Volume
-ENV RAILWAY_RUN_UID=0
-
-# Устанавливаем wget для загрузки файлов
 USER root
+
+# Устанавливаем wget и su-exec
 RUN apk add --no-cache wget su-exec
 
-# Создаём директорию для данных и устанавливаем права
+# Копируем startup скрипт
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
+# Переменные окружения
+ENV N8N_HOST=0.0.0.0
+ENV N8N_PORT=5678
+ENV N8N_PROTOCOL=https
+ENV DB_TYPE=sqlite
+ENV DB_SQLITE_DATABASE=/data/database.sqlite
+ENV DB_SQLITE_VACUUM_ON_STARTUP=true
+ENV N8N_DIAGNOSTICS_ENABLED=false
+ENV N8N_VERSION_NOTIFICATIONS_ENABLED=false
+ENV N8N_ENCRYPTION_KEY=defaultencryptionkey
+ENV RAILWAY_RUN_UID=0
+
+# Создаём директорию data и устанавливаем права
 RUN mkdir -p /data && chown -R node:node /data
 
-# Создаём startup скрипт прямо в Dockerfile
-RUN echo '#!/bin/bash\n\
-echo "🔄 Инициализация n8n..."\n\
-chown -R node:node /data\n\
-chmod 755 /data\n\
-if [ ! -f "/data/database.sqlite" ] && [ ! -z "$DATABASE_URL" ]; then\n\
-    echo "📥 Загружаем базу данных с $DATABASE_URL"\n\
-    wget --timeout=300 --tries=3 -O /data/database.sqlite "$DATABASE_URL"\n\
-    if [ -f "/data/database.sqlite" ]; then\n\
-        size=$(stat -c%s "/data/database.sqlite" 2>/dev/null || stat -f%z "/data/database.sqlite" 2>/dev/null)\n\
-        echo "📊 Размер файла: $size bytes"\n\
-        if [ "$size" -gt 500000000 ]; then\n\
-            echo "✅ База загружена"\n\
-            chown node:node /data/database.sqlite\n\
-            chmod 644 /data/database.sqlite\n\
-        else\n\
-            echo "⚠️ Файл неполный, создаём пустую базу"\n\
-            rm -f /data/database.sqlite\n\
-            touch /data/database.sqlite\n\
-            chown node:node /data/database.sqlite\n\
-        fi\n\
-    fi\n\
-elif [ ! -f "/data/database.sqlite" ]; then\n\
-    echo "💡 Создаём пустую базу"\n\
-    touch /data/database.sqlite\n\
-    chown node:node /data/database.sqlite\n\
-fi\n\
-echo "🚀 Запускаем n8n..."\n\
-exec su-exec node n8n\n' > /start.sh && chmod +x /start.sh
+EXPOSE 5678
 
-# Указываем рабочую директорию
-WORKDIR /home/node
-
-# Запускаем startup скрипт
 CMD ["/start.sh"] 
