@@ -2,8 +2,8 @@ FROM n8nio/n8n:latest
 
 USER root
 
-# Устанавливаем wget и su-exec
-RUN apk add --no-cache wget su-exec
+# Устанавливаем только su-exec
+RUN apk add --no-cache su-exec
 
 # Копируем startup скрипт
 COPY start.sh /start.sh
