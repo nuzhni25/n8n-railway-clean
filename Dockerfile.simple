@@ -1,11 +1,10 @@
 FROM n8nio/n8n
 
-# Копируем и делаем исполняемым init-скрипт
-COPY init.sh /init.sh
-RUN chmod +x /init.sh
-
 # Создаём директорию для данных
 RUN mkdir -p /data
+
+# Копируем базу данных в контейнер
+COPY database.sqlite /data/database.sqlite
 
 # Устанавливаем права доступа
 RUN chown -R node:node /data
@@ -13,7 +12,6 @@ RUN chown -R node:node /data
 # Указываем рабочую директорию
 WORKDIR /home/node
 
-# Запускаем через init-скрипт
+# Запускаем n8n
 USER node
-ENTRYPOINT ["/init.sh"]
-CMD ["n8n"] 
+CMD ["n8n"]
