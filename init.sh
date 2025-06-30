@@ -2,6 +2,11 @@
 
 echo "🔄 Инициализация n8n..."
 
+# Создаём и устанавливаем права на /data
+mkdir -p /data
+chown -R node:node /data
+chmod 755 /data
+
 # Проверяем, есть ли уже база в Volume
 if [ ! -f "/data/database.sqlite" ]; then
     echo "📥 Загружаем базу данных..."
@@ -45,17 +50,23 @@ if [ ! -f "/data/database.sqlite" ]; then
             rm -f /data/database.sqlite
             touch /data/database.sqlite
             chown node:node /data/database.sqlite
+            chmod 644 /data/database.sqlite
         fi
     else
         echo "💡 Переменная DATABASE_URL не найдена, создаём пустую базу"
         touch /data/database.sqlite
         chown node:node /data/database.sqlite
+        chmod 644 /data/database.sqlite
     fi
 else
     echo "✅ База данных уже существует"
     size=$(stat -c%s "/data/database.sqlite" 2>/dev/null || stat -f%z "/data/database.sqlite" 2>/dev/null)
     echo "📊 Размер существующей базы: $size bytes"
+    # Убеждаемся что права правильные
+    chown node:node /data/database.sqlite
+    chmod 644 /data/database.sqlite
 fi
 
-echo "🚀 Запускаем n8n..."
-exec "$@" 
+echo "🚀 Запускаем n8n как пользователь node..."
+# Переключаемся на пользователя node и запускаем n8n
+exec su-exec node "$@" 
