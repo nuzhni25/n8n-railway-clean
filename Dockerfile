@@ -1,4 +1,4 @@
-FROM n8n/n8n:latest
+FROM docker.n8n.io/n8nio/n8n:latest
 
 # Устанавливаем необходимые пакеты
 USER root
