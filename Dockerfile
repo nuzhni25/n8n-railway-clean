@@ -1,8 +1,8 @@
 FROM docker.n8n.io/n8nio/n8n:latest
 
-# Устанавливаем необходимые пакеты
+# Устанавливаем необходимые пакеты включая unzip для ZIP архивов
 USER root
-RUN apk add --no-cache wget curl su-exec bash
+RUN apk add --no-cache wget curl su-exec bash unzip
 
 # Создаем рабочие директории в домашней папке node
 RUN mkdir -p /home/node/data/.n8n && \
@@ -19,9 +19,6 @@ ENV N8N_USER_FOLDER=/home/node/data/.n8n
 
 # Возвращаемся к пользователю node
 USER node
-
-# Создаем символическую ссылку с /data на нашу папку для совместимости с Railway Volume
-RUN ln -sf /home/node/data /data
 
 # Используем ENTRYPOINT для гарантированного запуска
 ENTRYPOINT ["/start.sh"] 
