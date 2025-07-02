@@ -1,4 +1,4 @@
-FROM n8nio/n8n:latest
+FROM n8n/n8n:latest
 
 # Устанавливаем необходимые пакеты
 USER root
