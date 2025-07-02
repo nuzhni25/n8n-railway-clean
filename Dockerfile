@@ -7,7 +7,7 @@ RUN apk add --no-cache su-exec
 
 # Копируем startup скрипт
 COPY start.sh /start.sh
-RUN chmod +x /start.sh
+RUN chmod +x /start.sh && ls -la /start.sh
 
 # Переменные окружения
 ENV N8N_HOST=0.0.0.0
@@ -26,4 +26,4 @@ RUN mkdir -p /data && chown -R node:node /data
 
 EXPOSE 5678
 
-CMD ["/start.sh"] 
+CMD ["sh", "/start.sh"]
