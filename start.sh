@@ -16,32 +16,49 @@ download_database() {
     for i in 1 2 3; do
         echo "📥 Попытка $i загрузки базы данных..."
         
+        # Определяем временный файл
+        TEMP_FILE="/data/database_temp.sqlite"
+        
         if curl -L --fail --connect-timeout 60 --max-time 1800 \
             -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
             -H "Accept: */*" \
             --progress-bar \
-            -o /data/database_new.sqlite \
+            -o "$TEMP_FILE" \
             "$DATABASE_URL"; then
             
             # Проверяем размер файла
-            FILE_SIZE=$(stat -f%z /data/database_new.sqlite 2>/dev/null || stat -c%s /data/database_new.sqlite 2>/dev/null || echo 0)
+            FILE_SIZE=$(stat -f%z "$TEMP_FILE" 2>/dev/null || stat -c%s "$TEMP_FILE" 2>/dev/null || echo 0)
             echo "📊 Размер загруженного файла: $(($FILE_SIZE / 1024 / 1024)) MB"
             
-            if [ "$FILE_SIZE" -gt 500000000 ]; then
+            # Проверяем минимальный размер (50MB для сжатого файла или 400MB для несжатого)
+            MIN_SIZE=50000000
+            if [ "$FILE_SIZE" -gt "$MIN_SIZE" ]; then
                 echo "✅ База данных загружена! Перезапускаем n8n..."
-                # Останавливаем n8n, заменяем базу и перезапускаем
+                
+                # Останавливаем n8n
                 pkill -f "n8n"
                 sleep 5
-                mv /data/database_new.sqlite /data/database.sqlite
+                
+                # Проверяем, является ли файл сжатым (gzip magic number)
+                MAGIC=$(head -c 2 "$TEMP_FILE" | hexdump -v -e '/1 "%02x"')
+                if [ "$MAGIC" = "1f8b" ]; then
+                    echo "📦 Обнаружен сжатый файл, распаковываем..."
+                    gunzip -c "$TEMP_FILE" > /data/database.sqlite
+                    rm -f "$TEMP_FILE"
+                else
+                    echo "📁 Обычный файл SQLite"
+                    mv "$TEMP_FILE" /data/database.sqlite
+                fi
+                
                 echo "🔄 Перезапускаем n8n с новой базой..."
                 exec n8n
             else
-                echo "❌ Файл слишком маленький, повторяем..."
-                rm -f /data/database_new.sqlite
+                echo "❌ Файл слишком маленький ($(($FILE_SIZE / 1024 / 1024)) MB), повторяем..."
+                rm -f "$TEMP_FILE"
             fi
         else
             echo "❌ Ошибка загрузки, попытка $i"
-            rm -f /data/database_new.sqlite
+            rm -f "$TEMP_FILE"
         fi
         
         if [ $i -lt 3 ]; then
@@ -50,10 +67,8 @@ download_database() {
         fi
     done
     
-    if [ ! -f "/data/database.sqlite" ] || [ $(stat -f%z /data/database.sqlite 2>/dev/null || stat -c%s /data/database.sqlite 2>/dev/null || echo 0) -lt 500000000 ]; then
-        echo "❌ Не удалось загрузить полную базу данных"
-        echo "ℹ️  n8n продолжает работать с пустой базой"
-    fi
+    echo "❌ Не удалось загрузить полную базу данных"
+    echo "ℹ️  n8n продолжает работать с пустой базой"
 }
 
 # Создаем директорию для данных если запускается под root
@@ -75,7 +90,7 @@ if [ ! -f "/data/database.sqlite" ]; then
 else
     # Проверяем размер существующей базы
     CURRENT_SIZE=$(stat -f%z /data/database.sqlite 2>/dev/null || stat -c%s /data/database.sqlite 2>/dev/null || echo 0)
-    if [ "$CURRENT_SIZE" -lt 500000000 ]; then
+    if [ "$CURRENT_SIZE" -lt 400000000 ]; then
         echo "📝 База данных неполная ($(($CURRENT_SIZE / 1024 / 1024)) MB), загружаем полную версию в фоне..."
         download_database &
     else
