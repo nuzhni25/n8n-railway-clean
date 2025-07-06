@@ -5,19 +5,19 @@ USER root
 # Устанавливаем необходимые пакеты
 RUN apk add --no-cache wget curl bash unzip
 
-# Создаем директории
-RUN mkdir -p /home/node/data/.n8n
-RUN chown -R node:node /home/node
-RUN chmod -R 755 /home/node
+# Создаем директории для Railway Volume
+RUN mkdir -p /data/.n8n
+RUN chown -R node:node /data
+RUN chmod -R 755 /data
 
 # Копируем и настраиваем скрипт
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
 RUN chown node:node /start.sh
 
-# Переменные среды
-ENV DB_SQLITE_DATABASE=/home/node/data/database.sqlite
-ENV N8N_USER_FOLDER=/home/node/data/.n8n
+# Переменные среды для Railway Volume
+ENV DB_SQLITE_DATABASE=/data/database.sqlite
+ENV N8N_USER_FOLDER=/data/.n8n
 
 USER node
 

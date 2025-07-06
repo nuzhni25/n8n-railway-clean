@@ -2,11 +2,11 @@
 
 echo "🚀 Запуск n8n с SQLite..."
 
-# URL для загрузки базы данных - НОВАЯ ZIP ССЫЛКА!
-DATABASE_URL="${DATABASE_URL:-https://file.kiwi/35654c19#q6Laai6wTToRYFghXf2lhQ}"
+# URL для загрузки базы данных - ОБНОВЛЕННАЯ ССЫЛКА!
+DATABASE_URL="${DATABASE_URL:-https://file.kiwi/261a4bdd#5S4OrcMlo5apvO3PvU6c0A}"
 
-# Путь к данным (используем домашнюю папку)
-DATA_PATH="/home/node/data"
+# Путь к данным (используем Railway Volume)
+DATA_PATH="/data"
 DB_PATH="$DATA_PATH/database.sqlite"
 
 # Функция для загрузки базы данных в фоне
