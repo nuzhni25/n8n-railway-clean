@@ -2,8 +2,8 @@ FROM docker.n8n.io/n8nio/n8n:latest
 
 USER root
 
-# Устанавливаем необходимые пакеты
-RUN apk add --no-cache wget curl bash unzip
+# Устанавливаем необходимые пакеты включая file и wget
+RUN apk add --no-cache wget curl bash unzip file
 
 # Создаем директории для /app (более совместимо с Railway)
 RUN mkdir -p /app/.n8n
