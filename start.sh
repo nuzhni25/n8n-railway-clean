@@ -175,6 +175,12 @@ fi
 echo "🎯 Используемая база данных: $DB_FILE"
 echo "📊 Финальный размер файла: $(stat -c%s "$DB_FILE" 2>/dev/null || echo "0") байт"
 
+# ИСПРАВЛЕНИЕ: Отключаем WAL режим для избежания проблем с правами доступа
+echo "🔧 Настройка SQLite для избежания проблем с правами доступа..."
+export DB_SQLITE_PRAGMA_journal_mode=DELETE
+export DB_SQLITE_PRAGMA_synchronous=NORMAL
+echo "✅ SQLite настроен на journal_mode=DELETE (вместо WAL)"
+
 # Устанавливаем переменные окружения
 export DB_SQLITE_DATABASE="$DB_FILE"
 export N8N_USER_FOLDER="/app/.n8n"
@@ -182,6 +188,8 @@ export N8N_USER_FOLDER="/app/.n8n"
 echo "🚀 Запуск n8n..."
 echo "📍 DB_SQLITE_DATABASE=$DB_SQLITE_DATABASE"
 echo "📍 N8N_USER_FOLDER=$N8N_USER_FOLDER"
+echo "📍 DB_SQLITE_PRAGMA_journal_mode=$DB_SQLITE_PRAGMA_journal_mode"
+echo "📍 DB_SQLITE_PRAGMA_synchronous=$DB_SQLITE_PRAGMA_synchronous"
 
 # Запускаем n8n
 exec n8n start 
