@@ -1,12 +1,16 @@
 #!/bin/bash
 
 echo "🚀 ЗАПУСК n8n С RAILWAY VOLUME DATABASE..."
+echo "Основано на решениях Railway Station Community"
 
-# 🔧 Исправляем права доступа
+# 🔧 Исправляем права доступа (критически важно для SQLite!)
 echo "🔧 Настройка прав доступа..."
 sudo mkdir -p /home/node/.n8n 2>/dev/null || mkdir -p /home/node/.n8n
 sudo chown -R node:node /home/node/.n8n 2>/dev/null || chown -R node:node /home/node/.n8n
 chmod -R 755 /home/node/.n8n
+
+# Исправляем права доступа к volume (важно для SQLite записи!)
+sudo chmod -R 777 /app 2>/dev/null || chmod -R 777 /app 2>/dev/null || echo "⚠️ Не удалось изменить права /app"
 
 # 🔍 Диагностика Railway Volume
 echo "🔍 ДИАГНОСТИКА RAILWAY VOLUME..."
@@ -32,7 +36,7 @@ if [ -f "/app/database.sqlite" ]; then
     DATABASE_PATH="/app/database.sqlite"
     echo "✅ Найдена база: /app/database.sqlite"
 elif [ -f "/app/Database.sqlite" ]; then
-    DATABASE_PATH="/app/Database.sqlite"
+    DATABASE_PATH="/app/Database.sqlite"  
     echo "✅ Найдена база: /app/Database.sqlite"
 else
     # Ищем любую .sqlite базу
@@ -45,6 +49,10 @@ fi
 # Подключаем базу данных
 if [ ! -z "$DATABASE_PATH" ] && [ -f "$DATABASE_PATH" ]; then
     echo "🔗 Создаём символическую ссылку на базу данных..."
+    
+    # КРИТИЧНО: Исправляем права доступа к файлу базы данных
+    chmod 666 "$DATABASE_PATH" 2>/dev/null || echo "⚠️ Не удалось изменить права базы данных"
+    
     ln -sf "$DATABASE_PATH" /home/node/.n8n/database.sqlite
     
     # Проверяем подключение
@@ -54,6 +62,14 @@ if [ ! -z "$DATABASE_PATH" ] && [ -f "$DATABASE_PATH" ]; then
         echo "📊 Размер: $SIZE байт ($(echo "scale=2; $SIZE/1024/1024" | bc 2>/dev/null || echo "~545")MB)"
         echo "🔗 Ссылка: $(readlink /home/node/.n8n/database.sqlite)"
         
+        # Финальная проверка прав доступа
+        if [ -r "/home/node/.n8n/database.sqlite" ] && [ -w "/home/node/.n8n/database.sqlite" ]; then
+            echo "✅ Права доступа к базе данных корректны"
+        else
+            echo "⚠️ Исправляем финальные права доступа..."
+            chmod 666 /home/node/.n8n/database.sqlite 2>/dev/null
+        fi
+        
         # Проверяем структуру базы
         if command -v sqlite3 >/dev/null 2>&1; then
             echo "🔍 Проверка структуры базы..."
@@ -61,8 +77,12 @@ if [ ! -z "$DATABASE_PATH" ] && [ -f "$DATABASE_PATH" ]; then
             echo "📊 Количество таблиц: $TABLES"
             
             # Показываем несколько первых таблиц
-            echo "📋 Первые таблицы:"
-            sqlite3 /home/node/.n8n/database.sqlite ".tables" 2>/dev/null | head -5
+            if [ "$TABLES" -gt 0 ]; then
+                echo "📋 Первые таблицы:"
+                sqlite3 /home/node/.n8n/database.sqlite ".tables" 2>/dev/null | head -5
+            else
+                echo "⚠️ База данных пуста или повреждена"
+            fi
         fi
     else
         echo "❌ Ошибка при создании ссылки на базу данных"
@@ -85,6 +105,7 @@ else
         cd /app/ && unzip -o database.sqlite.zip
         if [ -f "/app/database.sqlite" ]; then
             echo "✅ База успешно распакована!"
+            chmod 666 /app/database.sqlite 2>/dev/null
             DATABASE_PATH="/app/database.sqlite"
             ln -sf "$DATABASE_PATH" /home/node/.n8n/database.sqlite
         else
@@ -92,7 +113,12 @@ else
             exit 1
         fi
     else
-        exit 1
+        # Создаем пустую базу данных если её нет (как предложено в Railway Station)
+        echo "🆕 Создаём новую базу данных SQLite..."
+        touch /app/database.sqlite
+        chmod 666 /app/database.sqlite 2>/dev/null
+        ln -sf /app/database.sqlite /home/node/.n8n/database.sqlite
+        echo "✅ Новая база данных создана"
     fi
 fi
 
@@ -113,8 +139,16 @@ export N8N_USER_SETTINGS="/home/node/.n8n"
 # Безопасность
 export N8N_ENCRYPTION_KEY="${N8N_ENCRYPTION_KEY:-n8n-encryption-key-railway-2024}"
 
-# Отключаем setup UI так как база уже есть
-export N8N_DISABLE_SETUP_UI="true"
+# Отключаем setup UI только если база уже существует и имеет таблицы
+if [ -f "/home/node/.n8n/database.sqlite" ]; then
+    TABLES_COUNT=$(sqlite3 /home/node/.n8n/database.sqlite ".tables" 2>/dev/null | wc -w)
+    if [ "$TABLES_COUNT" -gt 0 ]; then
+        export N8N_DISABLE_SETUP_UI="true"
+        echo "✅ Setup UI отключен (база данных содержит таблицы)"
+    else
+        echo "🆕 Setup UI включен (база данных пуста)"
+    fi
+fi
 
 # Логирование для отладки
 export N8N_LOG_LEVEL="debug"
@@ -142,12 +176,12 @@ if [ -r "/home/node/.n8n/database.sqlite" ] && [ -w "/home/node/.n8n/database.sq
     echo "✅ Права доступа к базе данных в порядке"
 else
     echo "⚠️ Исправляем права доступа к базе данных..."
-    chmod 644 /home/node/.n8n/database.sqlite
+    chmod 666 /home/node/.n8n/database.sqlite 2>/dev/null
 fi
 
 echo ""
 echo "🎉 ВСЁ ГОТОВО! ЗАПУСКАЕМ n8n..."
-echo "🔗 База данных: $(readlink /home/node/.n8n/database.sqlite)"
+echo "🔗 База данных: $(readlink /home/node/.n8n/database.sqlite 2>/dev/null || echo '/home/node/.n8n/database.sqlite')"
 echo "📊 Размер: $(stat -c%s /home/node/.n8n/database.sqlite 2>/dev/null) байт"
 
 # Запускаем n8n
