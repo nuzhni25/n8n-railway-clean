@@ -105,23 +105,34 @@ chmod 664 /app/database.sqlite 2>/dev/null || echo "⚠️  Не удалось 
 
 echo "✅ Права доступа исправлены"
 
-# Проверяем наличие database.sqlite в /app
+# НОВЫЙ ПОДХОД: Копируем файл из /app в домашнюю директорию пользователя
 echo "🔍 Проверка наличия database.sqlite в /app..."
 
+# Создаем директорию для базы данных в домашней папке
+mkdir -p /home/node/data
+
 if check_sqlite_file "/app/database.sqlite"; then
-    echo "✅ Найден валидный database.sqlite в /app, используем его"
-    DB_FILE="/app/database.sqlite"
+    echo "✅ Найден валидный database.sqlite в /app ($(stat -c%s "/app/database.sqlite" 2>/dev/null || echo "0") байт)"
+    echo "📋 Копируем файл в домашнюю директорию пользователя node..."
+    cp "/app/database.sqlite" "/home/node/data/database.sqlite"
+    chown node:node "/home/node/data/database.sqlite"
+    chmod 664 "/home/node/data/database.sqlite"
+    echo "✅ База данных скопирована в /home/node/data/database.sqlite"
+    DB_FILE="/home/node/data/database.sqlite"
 elif [ -f "/app/database.sqlite.zip" ]; then
-    echo "📦 Найден database.sqlite.zip, попытка извлечения..."
+    echo "📦 Найден database.sqlite.zip ($(stat -c%s "/app/database.sqlite.zip" 2>/dev/null || echo "0") байт)"
+    echo "📋 Извлекаем архив в домашнюю директорию пользователя node..."
     if command -v unzip >/dev/null 2>&1; then
         if unzip -t "/app/database.sqlite.zip" >/dev/null 2>&1; then
             echo "✅ ZIP файл валиден, извлекаем..."
-            unzip -o "/app/database.sqlite.zip" -d "/app/"
-            if check_sqlite_file "/app/database.sqlite"; then
-                echo "✅ База данных успешно извлечена из ZIP"
-                DB_FILE="/app/database.sqlite"
+            unzip -o "/app/database.sqlite.zip" -d "/home/node/data/"
+            if [ -f "/home/node/data/database.sqlite" ]; then
+                chown node:node "/home/node/data/database.sqlite"
+                chmod 664 "/home/node/data/database.sqlite"
+                echo "✅ База данных извлечена в /home/node/data/database.sqlite"
+                DB_FILE="/home/node/data/database.sqlite"
             else
-                echo "❌ Извлеченный файл поврежден"
+                echo "❌ Файл не найден после извлечения"
             fi
         else
             echo "❌ ZIP файл поврежден"
@@ -131,45 +142,13 @@ elif [ -f "/app/database.sqlite.zip" ]; then
     fi
 fi
 
-# Если файл не найден или поврежден, загружаем из интернета
-if [ ! -f "$DB_FILE" ] || ! check_sqlite_file "$DB_FILE"; then
-    echo "🌐 Загрузка базы данных из интернета..."
-    
-    # Список URL для загрузки (в порядке приоритета)
-    URLS=(
-        "https://file.kiwi/33ccc5d8"
-        "https://file.kiwi/261a4bdd#5S4OrcMlo5apvO3PvU6c0A"
-        "https://file.kiwi/33ccc9a6#0TVv_YEMbV2tWaivXh5dBA"
-    )
-    
-    for url in "${URLS[@]}"; do
-        echo "🔄 Попытка загрузки с: $url"
-        
-        # Загружаем во временный файл
-        temp_file="/app/database_temp.sqlite"
-        
-        if download_database "$url" "$temp_file"; then
-            # Проверяем загруженный файл
-            if check_sqlite_file "$temp_file"; then
-                mv "$temp_file" "/app/database.sqlite"
-                echo "✅ База данных успешно загружена и установлена"
-                DB_FILE="/app/database.sqlite"
-                break
-            else
-                echo "❌ Загруженный файл поврежден"
-                rm -f "$temp_file"
-            fi
-        else
-            echo "❌ Не удалось загрузить с: $url"
-        fi
-    done
-    
-    # Если все загрузки не удались, создаем пустую базу
-    if [ ! -f "$DB_FILE" ]; then
-        echo "⚠️  Не удалось загрузить базу данных, n8n создаст новую"
-        touch /app/database.sqlite
-        DB_FILE="/app/database.sqlite"
-    fi
+# Если файл не найден, создаем пустую базу в домашней директории
+if [ ! -f "$DB_FILE" ]; then
+    echo "⚠️  Файлы в /app не найдены или повреждены, создаем новую базу данных"
+    touch "/home/node/data/database.sqlite"
+    chown node:node "/home/node/data/database.sqlite"
+    chmod 664 "/home/node/data/database.sqlite"
+    DB_FILE="/home/node/data/database.sqlite"
 fi
 
 echo "🎯 Используемая база данных: $DB_FILE"
@@ -183,7 +162,11 @@ echo "✅ SQLite настроен на journal_mode=DELETE (вместо WAL)"
 
 # Устанавливаем переменные окружения
 export DB_SQLITE_DATABASE="$DB_FILE"
-export N8N_USER_FOLDER="/app/.n8n"
+export N8N_USER_FOLDER="/home/node/.n8n"
+
+# Создаем директорию для n8n конфигурации
+mkdir -p /home/node/.n8n
+chown -R node:node /home/node/.n8n
 
 echo "🚀 Запуск n8n..."
 echo "📍 DB_SQLITE_DATABASE=$DB_SQLITE_DATABASE"
