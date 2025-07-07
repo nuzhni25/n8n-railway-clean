@@ -9,6 +9,12 @@ sudo mkdir -p /home/node/.n8n 2>/dev/null || mkdir -p /home/node/.n8n
 sudo chown -R node:node /home/node/.n8n 2>/dev/null || chown -R node:node /home/node/.n8n
 chmod -R 755 /home/node/.n8n
 
+# КРИТИЧНО: Исправляем права для конфига n8n (блокирует запуск!)
+mkdir -p /home/node/.n8n/config 2>/dev/null
+chmod 600 /home/node/.n8n/config 2>/dev/null
+touch /home/node/.n8n/config/.gitkeep 2>/dev/null
+chmod 600 /home/node/.n8n/config/.gitkeep 2>/dev/null
+
 # Исправляем права доступа к volume (важно для SQLite записи!)
 sudo chmod -R 777 /app 2>/dev/null || chmod -R 777 /app 2>/dev/null || echo "⚠️ Не удалось изменить права /app"
 
@@ -38,6 +44,9 @@ if [ -f "/app/database.sqlite" ]; then
 elif [ -f "/app/Database.sqlite" ]; then
     DATABASE_PATH="/app/Database.sqlite"  
     echo "✅ Найдена база: /app/Database.sqlite"
+elif [ -f "/app/storage/database.sqlite" ]; then
+    DATABASE_PATH="/app/storage/database.sqlite"
+    echo "✅ Найдена база: /app/storage/database.sqlite"
 else
     # Ищем любую .sqlite базу
     DATABASE_PATH=$(find /app/ -name "*.sqlite" -type f | head -1)
@@ -136,6 +145,11 @@ export N8N_DATABASE_SQLITE_DATABASE="/home/node/.n8n/database.sqlite"
 export N8N_USER_FOLDER="/home/node/.n8n"
 export N8N_USER_SETTINGS="/home/node/.n8n"
 
+# КРИТИЧНО: Исправляем права для SSH и конфигов
+export N8N_DISABLE_SETUP_UI="false"  # Включаем Setup UI для первой настройки
+export N8N_SECURE_COOKIE="false"     # Отключаем для Railway
+export N8N_CONFIG_SECURE="false"     # Исправляет проблему с конфигом
+
 # Безопасность
 export N8N_ENCRYPTION_KEY="${N8N_ENCRYPTION_KEY:-n8n-encryption-key-railway-2024}"
 
@@ -178,6 +192,10 @@ else
     echo "⚠️ Исправляем права доступа к базе данных..."
     chmod 666 /home/node/.n8n/database.sqlite 2>/dev/null
 fi
+
+# КРИТИЧНО: Финальное исправление прав для config
+chmod -R 600 /home/node/.n8n/config* 2>/dev/null
+chown -R node:node /home/node/.n8n 2>/dev/null
 
 echo ""
 echo "🎉 ВСЁ ГОТОВО! ЗАПУСКАЕМ n8n..."
