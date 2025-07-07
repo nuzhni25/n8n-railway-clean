@@ -1,24 +1,42 @@
 FROM docker.n8n.io/n8nio/n8n:latest
 
+# Переключаемся на root для установки пакетов
 USER root
 
-# Устанавливаем необходимые пакеты включая file и wget
-RUN apk add --no-cache wget curl bash unzip file
+# Устанавливаем необходимые пакеты
+RUN apk add --no-cache \
+    wget \
+    curl \
+    bash \
+    unzip \
+    file \
+    sqlite \
+    bc \
+    sudo
 
-# Создаем директории для /app (более совместимо с Railway)
-RUN mkdir -p /app/.n8n
-RUN chown -R node:node /app
-RUN chmod -R 755 /app
+# Создаем необходимые директории
+RUN mkdir -p /app \
+    && mkdir -p /home/node/.n8n \
+    && chown -R node:node /app \
+    && chown -R node:node /home/node/.n8n \
+    && chmod -R 755 /app \
+    && chmod -R 755 /home/node/.n8n
 
-# Копируем и настраиваем скрипт
+# Даем пользователю node права sudo (для исправления прав доступа)
+RUN echo "node ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+# Копируем и настраиваем скрипт запуска
 COPY start.sh /start.sh
-RUN chmod +x /start.sh
-RUN chown node:node /start.sh
+RUN chmod +x /start.sh \
+    && chown node:node /start.sh
 
-# Переменные среды для /app вместо /data
-ENV DB_SQLITE_DATABASE=/app/database.sqlite
-ENV N8N_USER_FOLDER=/app/.n8n
+# Настройка переменных окружения
+ENV N8N_USER_FOLDER=/home/node/.n8n
+ENV N8N_DATABASE_TYPE=sqlite
+ENV DB_TYPE=sqlite
 
+# Переключаемся обратно на пользователя node
 USER node
 
+# Устанавливаем точку входа
 ENTRYPOINT ["/start.sh"] 
