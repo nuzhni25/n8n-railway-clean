@@ -1,5 +1,47 @@
 #!/bin/bash
 
+echo "🚀 Starting n8n with database loading script..."
+
+# 🔧 FIX RAILWAY VOLUME PERMISSIONS FIRST!
+echo "🔧 Fixing Railway Volume permissions..."
+if [ -d "/app" ]; then
+    echo "📁 Railway Volume found at /app"
+    echo "👤 Current user: $(whoami)"
+    echo "📋 Current /app permissions:"
+    ls -la /app/ | head -10
+    
+    # Try to change ownership of the entire volume to node user
+    echo "🔄 Attempting to fix ownership..."
+    chown -R node:node /app 2>/dev/null || echo "⚠️ Could not change ownership (Railway restriction)"
+    
+    # Set proper permissions for SQLite operations
+    echo "🔄 Attempting to fix permissions..."
+    chmod -R 755 /app 2>/dev/null || echo "⚠️ Could not change permissions (Railway restriction)"
+    
+    # Alternative: create a subdirectory with proper permissions
+    echo "🆕 Creating writable subdirectory..."
+    mkdir -p /app/writable 2>/dev/null || echo "⚠️ Could not create subdirectory"
+    chown node:node /app/writable 2>/dev/null || echo "⚠️ Could not change subdirectory ownership"
+    chmod 777 /app/writable 2>/dev/null || echo "⚠️ Could not change subdirectory permissions"
+    
+    echo "📋 Updated /app permissions:"
+    ls -la /app/ | head -10
+else
+    echo "❌ Railway Volume /app not found"
+fi
+
+# Set environment variables
+export N8N_USER_FOLDER=/home/node/.n8n
+export DB_SQLITE_DATABASE=/home/node/data/database.sqlite
+export N8N_ENCRYPTION_KEY="GevJ653kDGJTiemfO4SynmyQEMRwyL/X"
+export DB_SQLITE_PRAGMA_journal_mode=DELETE
+export DB_SQLITE_PRAGMA_synchronous=NORMAL
+
+# Create necessary directories
+echo "📁 Creating directories..."
+mkdir -p /home/node/.n8n
+mkdir -p /home/node/data
+
 # Функция для проверки валидности SQLite файла
 check_sqlite_file() {
     local file_path="$1"
@@ -86,6 +128,38 @@ CURRENT_UID=$(id -u)
 CURRENT_GID=$(id -g)
 echo "👤 Текущий пользователь: $CURRENT_USER ($CURRENT_UID:$CURRENT_GID)"
 
+# 🆕 ДОПОЛНИТЕЛЬНАЯ ДИАГНОСТИКА РАЗРЕШЕНИЙ
+echo "🔍 Детальная диагностика разрешений /app..."
+if [ -d "/app" ]; then
+    echo "📂 Права доступа к /app:"
+    ls -ld /app/ 2>/dev/null || echo "❌ Не удалось получить информацию о /app"
+    
+    echo "📊 Содержимое /app с правами:"
+    ls -la /app/ | head -10 2>/dev/null || echo "❌ Не удалось прочитать содержимое /app"
+    
+    echo "🧪 Тест записи в /app:"
+    if touch /app/test_write_permission 2>/dev/null; then
+        echo "✅ Запись в /app разрешена"
+        rm -f /app/test_write_permission
+    else
+        echo "❌ Запись в /app запрещена - это Railway ограничение!"
+    fi
+    
+    echo "🧪 Тест чтения файлов в /app:"
+    for file in /app/*.sqlite*; do
+        if [ -f "$file" ]; then
+            echo "📄 Файл: $file"
+            if [ -r "$file" ]; then
+                echo "  ✅ Доступен для чтения"
+                file_size=$(stat -c%s "$file" 2>/dev/null || echo "unknown")
+                echo "  📊 Размер: $file_size байт"
+            else
+                echo "  ❌ НЕ доступен для чтения"
+            fi
+        fi
+    done
+fi
+
 # Изменяем владельца всех файлов в /app на текущего пользователя
 chown -R $CURRENT_UID:$CURRENT_GID /app/ 2>/dev/null || {
     echo "⚠️  Не удалось изменить владельца через chown, пробуем альтернативный способ..."
@@ -167,16 +241,53 @@ if [ ! -f "$DB_FILE" ] && [ -n "$LARGEST_DB" ] && [ "$LARGEST_SIZE" -gt 50000000
     echo "✅ Используем самый большой database.sqlite: $LARGEST_DB ($(echo $LARGEST_SIZE | numfmt --to=iec 2>/dev/null || echo $LARGEST_SIZE) байт)"
     echo "📋 Копируем файл в домашнюю директорию пользователя node..."
     
-    # Используем dd для надежного копирования больших файлов
-    echo "🔄 Копирование с помощью dd для надежности..."
-    dd if="$LARGEST_DB" of="/home/node/data/database.sqlite" bs=1M 2>/dev/null || {
-        echo "❌ dd не сработал, пробуем обычное копирование..."
-        cp "$LARGEST_DB" "/home/node/data/database.sqlite"
-    }
+    # НОВЫЙ МЕТОД: Исправляем разрешения ПЕРЕД копированием
+    echo "🔧 Исправляем разрешения исходного файла..."
+    chmod +r "$LARGEST_DB" 2>/dev/null || echo "⚠️ Не удалось изменить права чтения"
+    
+    # Метод 1: dd с лучшими параметрами
+    echo "🔄 Метод 1: dd с оптимизацией для больших файлов..."
+    if dd if="$LARGEST_DB" of="/home/node/data/database.sqlite" bs=4M status=progress 2>/dev/null; then
+        echo "✅ dd копирование успешно"
+    else
+        echo "❌ dd не сработал"
+        
+        # Метод 2: cat с перенаправлением (обходит некоторые ограничения)
+        echo "🔄 Метод 2: cat с перенаправлением..."
+        if cat "$LARGEST_DB" > "/home/node/data/database.sqlite" 2>/dev/null; then
+            echo "✅ cat копирование успешно"
+        else
+            echo "❌ cat не сработал"
+            
+            # Метод 3: rsync (если доступен)
+            if command -v rsync >/dev/null 2>&1; then
+                echo "🔄 Метод 3: rsync копирование..."
+                if rsync -av "$LARGEST_DB" "/home/node/data/database.sqlite" 2>/dev/null; then
+                    echo "✅ rsync копирование успешно"
+                else
+                    echo "❌ rsync не сработал"
+                fi
+            fi
+            
+            # Метод 4: tar (создаем архив и извлекаем)
+            echo "🔄 Метод 4: tar архивирование..."
+            if tar -cf - -C "$(dirname "$LARGEST_DB")" "$(basename "$LARGEST_DB")" | tar -xf - -C "/home/node/data/" 2>/dev/null; then
+                mv "/home/node/data/$(basename "$LARGEST_DB")" "/home/node/data/database.sqlite" 2>/dev/null
+                echo "✅ tar копирование успешно"
+            else
+                echo "❌ tar не сработал"
+                
+                # Метод 5: Обычное cp (последняя попытка)
+                echo "🔄 Метод 5: обычное cp..."
+                cp "$LARGEST_DB" "/home/node/data/database.sqlite" 2>/dev/null || echo "❌ cp не сработал"
+            fi
+        fi
+    fi
     
     # Проверяем результат копирования
     COPIED_SIZE=$(stat -c%s "/home/node/data/database.sqlite" 2>/dev/null || echo "0")
     echo "📊 Размер скопированного файла: $COPIED_SIZE байт"
+    echo "📊 Размер исходного файла: $LARGEST_SIZE байт"
     
     if [ "$COPIED_SIZE" -gt 50000000 ]; then
         chown node:node "/home/node/data/database.sqlite"
@@ -185,6 +296,18 @@ if [ ! -f "$DB_FILE" ] && [ -n "$LARGEST_DB" ] && [ "$LARGEST_SIZE" -gt 50000000
         DB_FILE="/home/node/data/database.sqlite"
     else
         echo "❌ Копирование неудачно, размер слишком мал: $COPIED_SIZE байт"
+        echo "🔍 Диагностика проблем с копированием..."
+        
+        # Дополнительная диагностика
+        echo "📋 Права доступа к исходному файлу:"
+        ls -la "$LARGEST_DB" 2>/dev/null || echo "❌ Не удалось проверить права"
+        
+        echo "📋 Свободное место в /home/node/data/:"
+        df -h /home/node/data/ 2>/dev/null || echo "❌ Не удалось проверить место"
+        
+        echo "📋 Попытка прочитать первые байты файла:"
+        head -c 100 "$LARGEST_DB" 2>/dev/null | hexdump -C | head -5 || echo "❌ Не удалось прочитать файл"
+        
         rm -f "/home/node/data/database.sqlite"
     fi
 fi
@@ -205,7 +328,12 @@ echo "📊 Финальный размер файла: $(stat -c%s "$DB_FILE" 2>
 echo "🔧 Настройка SQLite для избежания проблем с правами доступа..."
 export DB_SQLITE_PRAGMA_journal_mode=DELETE
 export DB_SQLITE_PRAGMA_synchronous=NORMAL
+
+# 🆕 ДОПОЛНИТЕЛЬНЫЕ НАСТРОЙКИ для Railway Volume
+export DB_SQLITE_PRAGMA_temp_store=MEMORY
+export DB_SQLITE_PRAGMA_mmap_size=0
 echo "✅ SQLite настроен на journal_mode=DELETE (вместо WAL)"
+echo "✅ Отключен memory mapping для совместимости с Railway"
 
 # ДИАГНОСТИКА: Проверяем содержимое базы данных
 echo "🔍 Диагностика содержимого базы данных..."
@@ -223,6 +351,40 @@ if [ -f "$DB_FILE" ]; then
     ls -lh "$DB_FILE"
 fi
 
+# КРИТИЧНО: Устанавливаем ключ шифрования для n8n
+# Без этого ключа n8n не может расшифровать данные и показывает setup экран
+if [ -z "$N8N_ENCRYPTION_KEY" ]; then
+    echo "🔑 Устанавливаем ключ шифрования для n8n..."
+    export N8N_ENCRYPTION_KEY="GevJ653kDGJTiemfO4SynmyQEMRwyL/X"
+    echo "✅ N8N_ENCRYPTION_KEY установлен"
+else
+    echo "✅ N8N_ENCRYPTION_KEY уже установлен: ${N8N_ENCRYPTION_KEY:0:20}..."
+fi
+
+# 🆕 АЛЬТЕРНАТИВНЫЙ ПОДХОД: Прямое указание пути к базе в /app
+if [ ! -f "$DB_FILE" ] || [ "$(stat -c%s "$DB_FILE" 2>/dev/null || echo "0")" -lt 50000000 ]; then
+    echo "🔄 База не скопирована или слишком мала, пробуем прямое указание пути..."
+    
+    # Ищем большую базу в /app и используем её напрямую
+    for direct_db in "/app/database.sqlite" "/app/"*.sqlite; do
+        if [ -f "$direct_db" ]; then
+            file_size=$(stat -c%s "$direct_db" 2>/dev/null || echo "0")
+            if [ "$file_size" -gt 50000000 ]; then
+                echo "🎯 НАЙДЕНА БОЛЬШАЯ БАЗА: $direct_db ($file_size байт)"
+                echo "📍 Используем её НАПРЯМУЮ без копирования!"
+                
+                # Устанавливаем права доступа
+                chmod +r "$direct_db" 2>/dev/null || echo "⚠️ Не удалось установить права чтения"
+                
+                # Используем базу напрямую из /app
+                DB_FILE="$direct_db"
+                echo "✅ База данных будет использоваться напрямую: $DB_FILE"
+                break
+            fi
+        fi
+    done
+fi
+
 # Устанавливаем переменные окружения
 export DB_SQLITE_DATABASE="$DB_FILE"
 export N8N_USER_FOLDER="/home/node/.n8n"
@@ -234,6 +396,7 @@ chown -R node:node /home/node/.n8n
 echo "🚀 Запуск n8n..."
 echo "📍 DB_SQLITE_DATABASE=$DB_SQLITE_DATABASE"
 echo "📍 N8N_USER_FOLDER=$N8N_USER_FOLDER"
+echo "📍 N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:0:20}..."
 echo "📍 DB_SQLITE_PRAGMA_journal_mode=$DB_SQLITE_PRAGMA_journal_mode"
 echo "📍 DB_SQLITE_PRAGMA_synchronous=$DB_SQLITE_PRAGMA_synchronous"
 
