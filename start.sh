@@ -145,6 +145,17 @@ export N8N_DATABASE_SQLITE_DATABASE="/home/node/.n8n/database.sqlite"
 export N8N_USER_FOLDER="/home/node/.n8n"
 export N8N_USER_SETTINGS="/home/node/.n8n"
 
+# КРИТИЧНО: Новые переменные из логов n8n 1.59.4
+export N8N_RUNNERS_ENABLED="true"  # Исправляет deprecated warning
+export N8N_RUNNERS_MODE="main"     # Запуск в основном режиме
+export N8N_RUNNERS_PATH="/home/node/.n8n/runners"
+
+# Веб-сервер настройки для Railway
+export N8N_HOST="0.0.0.0"
+export N8N_PORT="5678"
+export N8N_PROTOCOL="https"
+export WEBHOOK_URL="${RAILWAY_STATIC_URL:-https://zolexai.online}/"
+
 # КРИТИЧНО: Исправляем права для SSH и конфигов
 export N8N_DISABLE_SETUP_UI="false"  # Включаем Setup UI для первой настройки
 export N8N_SECURE_COOKIE="false"     # Отключаем для Railway
@@ -165,13 +176,14 @@ if [ -f "/home/node/.n8n/database.sqlite" ]; then
 fi
 
 # Логирование для отладки
-export N8N_LOG_LEVEL="debug"
+export N8N_LOG_LEVEL="info"  # Уменьшаем логирование
 
 echo "✅ Переменные окружения настроены:"
 echo "   DB_TYPE: $DB_TYPE"
 echo "   DB_SQLITE_DATABASE: $DB_SQLITE_DATABASE"
 echo "   N8N_USER_FOLDER: $N8N_USER_FOLDER"
-echo "   N8N_ENCRYPTION_KEY: установлен"
+echo "   N8N_HOST: $N8N_HOST:$N8N_PORT"
+echo "   N8N_RUNNERS_ENABLED: $N8N_RUNNERS_ENABLED"
 
 # 🚀 Финальная проверка и запуск
 echo ""
@@ -201,6 +213,7 @@ echo ""
 echo "🎉 ВСЁ ГОТОВО! ЗАПУСКАЕМ n8n..."
 echo "🔗 База данных: $(readlink /home/node/.n8n/database.sqlite 2>/dev/null || echo '/home/node/.n8n/database.sqlite')"
 echo "📊 Размер: $(stat -c%s /home/node/.n8n/database.sqlite 2>/dev/null) байт"
+echo "🌐 URL: $WEBHOOK_URL"
 
 # Запускаем n8n
 exec n8n start 
