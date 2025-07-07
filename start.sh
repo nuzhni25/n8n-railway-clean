@@ -431,16 +431,52 @@ else
     echo "🔄 Возвращаемся к стандартной логике с $DB_FILE"
 fi
 
+# 🚨 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Принудительно используем Railway Volume базу!
+echo "🚨 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ - проверяем Railway Volume..."
+if [ -f "/app/database.sqlite" ]; then
+    file_size=$(stat -c%s "/app/database.sqlite" 2>/dev/null || echo "0")
+    if [ "$file_size" -gt 50000000 ]; then
+        echo "🎯 ПРИНУДИТЕЛЬНО ИСПОЛЬЗУЕМ RAILWAY VOLUME БАЗУ!"
+        DB_FILE="/app/database.sqlite"
+        echo "✅ Принудительно установлен DB_FILE=$DB_FILE"
+    fi
+fi
+
 # Устанавливаем переменные окружения
 export DB_SQLITE_DATABASE="$DB_FILE"
 export N8N_USER_FOLDER="/home/node/.n8n"
+
+# 🔧 ДОПОЛНИТЕЛЬНЫЕ ПЕРЕМЕННЫЕ ДЛЯ n8n
+export DB_TYPE="sqlite"
+export N8N_DATABASE_TYPE="sqlite"
+export N8N_DATABASE_SQLITE_DATABASE="$DB_FILE"
 
 # Создаем директорию для n8n конфигурации
 mkdir -p /home/node/.n8n
 chown -R node:node /home/node/.n8n
 
+# 🚨 ФИНАЛЬНАЯ ПРОВЕРКА ПЕРЕД ЗАПУСКОМ
+echo "🚨 ФИНАЛЬНАЯ ПРОВЕРКА БАЗЫ ДАННЫХ..."
+echo "📍 DB_FILE: $DB_FILE"
+echo "📍 Размер файла: $(stat -c%s "$DB_FILE" 2>/dev/null || echo "0") байт"
+echo "📍 Файл существует: $([ -f "$DB_FILE" ] && echo "ДА" || echo "НЕТ")"
+echo "📍 Файл доступен для чтения: $([ -r "$DB_FILE" ] && echo "ДА" || echo "НЕТ")"
+
+if [ -f "$DB_FILE" ]; then
+    echo "✅ Проверяем содержимое базы данных..."
+    table_count=$(sqlite3 "$DB_FILE" "SELECT name FROM sqlite_master WHERE type='table';" 2>/dev/null | wc -l || echo "0")
+    echo "📊 Количество таблиц в базе: $table_count"
+    
+    if [ "$table_count" -gt 0 ]; then
+        echo "✅ БАЗА ДАННЫХ СОДЕРЖИТ ТАБЛИЦЫ - ДОЛЖНА РАБОТАТЬ!"
+    else
+        echo "⚠️ База данных пустая или поврежденная"
+    fi
+fi
+
 echo "🚀 Запуск n8n..."
 echo "📍 DB_SQLITE_DATABASE=$DB_SQLITE_DATABASE"
+echo "📍 N8N_DATABASE_SQLITE_DATABASE=$N8N_DATABASE_SQLITE_DATABASE"
 echo "📍 N8N_USER_FOLDER=$N8N_USER_FOLDER"
 echo "📍 N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:0:20}..."
 echo "📍 DB_SQLITE_PRAGMA_journal_mode=$DB_SQLITE_PRAGMA_journal_mode"
