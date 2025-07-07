@@ -21,4 +21,4 @@ ENV N8N_USER_FOLDER=/app/.n8n
 
 USER node
 
-ENTRYPOINT ["/start.sh"]
+ENTRYPOINT ["/start.sh"] 
