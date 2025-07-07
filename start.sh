@@ -123,10 +123,25 @@ find /app -name "*.sqlite*" -exec ls -lh {} \; 2>/dev/null || echo "SQLite фа�
 # Создаем директорию для базы данных в домашней папке
 mkdir -p /home/node/data
 
-if check_sqlite_file "/app/database.sqlite"; then
-    echo "✅ Найден валидный database.sqlite в /app ($(stat -c%s "/app/database.sqlite" 2>/dev/null || echo "0") байт)"
+# Ищем самый большой SQLite файл в /app
+LARGEST_DB=""
+LARGEST_SIZE=0
+
+for db_file in "/app/database.sqlite" "/app/"*.sqlite; do
+    if [ -f "$db_file" ]; then
+        file_size=$(stat -c%s "$db_file" 2>/dev/null || echo "0")
+        echo "📊 Найден файл: $db_file (размер: $file_size байт)"
+        if [ "$file_size" -gt "$LARGEST_SIZE" ]; then
+            LARGEST_SIZE="$file_size"
+            LARGEST_DB="$db_file"
+        fi
+    fi
+done
+
+if [ -n "$LARGEST_DB" ] && [ "$LARGEST_SIZE" -gt 50000000 ]; then
+    echo "✅ Используем самый большой database.sqlite: $LARGEST_DB ($(echo $LARGEST_SIZE | numfmt --to=iec 2>/dev/null || echo $LARGEST_SIZE) байт)"
     echo "📋 Копируем файл в домашнюю директорию пользователя node..."
-    cp "/app/database.sqlite" "/home/node/data/database.sqlite"
+    cp "$LARGEST_DB" "/home/node/data/database.sqlite"
     chown node:node "/home/node/data/database.sqlite"
     chmod 664 "/home/node/data/database.sqlite"
     echo "✅ База данных скопирована в /home/node/data/database.sqlite"
