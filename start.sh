@@ -138,16 +138,9 @@ for db_file in "/app/database.sqlite" "/app/"*.sqlite; do
     fi
 done
 
-if [ -n "$LARGEST_DB" ] && [ "$LARGEST_SIZE" -gt 50000000 ]; then
-    echo "✅ Используем самый большой database.sqlite: $LARGEST_DB ($(echo $LARGEST_SIZE | numfmt --to=iec 2>/dev/null || echo $LARGEST_SIZE) байт)"
-    echo "📋 Копируем файл в домашнюю директорию пользователя node..."
-    cp "$LARGEST_DB" "/home/node/data/database.sqlite"
-    chown node:node "/home/node/data/database.sqlite"
-    chmod 664 "/home/node/data/database.sqlite"
-    echo "✅ База данных скопирована в /home/node/data/database.sqlite"
-    DB_FILE="/home/node/data/database.sqlite"
-elif [ -f "/app/database.sqlite.zip" ]; then
-    echo "📦 Найден database.sqlite.zip ($(stat -c%s "/app/database.sqlite.zip" 2>/dev/null || echo "0") байт)"
+# ПРИОРИТЕТ АРХИВУ: Сначала пробуем ZIP архив (более надежно для больших файлов)
+if [ -f "/app/database.sqlite.zip" ]; then
+    echo "📦 ПРИОРИТЕТ: Найден database.sqlite.zip ($(stat -c%s "/app/database.sqlite.zip" 2>/dev/null || echo "0") байт)"
     echo "📋 Извлекаем архив в домашнюю директорию пользователя node..."
     if command -v unzip >/dev/null 2>&1; then
         if unzip -t "/app/database.sqlite.zip" >/dev/null 2>&1; then
@@ -156,18 +149,45 @@ elif [ -f "/app/database.sqlite.zip" ]; then
             if [ -f "/home/node/data/database.sqlite" ]; then
                 chown node:node "/home/node/data/database.sqlite"
                 chmod 664 "/home/node/data/database.sqlite"
-                echo "✅ База данных извлечена в /home/node/data/database.sqlite"
+                echo "✅ База данных извлечена из архива в /home/node/data/database.sqlite"
                 DB_FILE="/home/node/data/database.sqlite"
             else
                 echo "❌ Файл не найден после извлечения"
             fi
         else
-            echo "❌ ZIP файл поврежден"
+            echo "❌ ZIP файл поврежден, пробуем прямое копирование..."
         fi
     else
-        echo "❌ unzip не установлен"
+        echo "❌ unzip не установлен, пробуем прямое копирование..."
     fi
 fi
+
+# Если архив не сработал, пробуем прямое копирование
+if [ ! -f "$DB_FILE" ] && [ -n "$LARGEST_DB" ] && [ "$LARGEST_SIZE" -gt 50000000 ]; then
+    echo "✅ Используем самый большой database.sqlite: $LARGEST_DB ($(echo $LARGEST_SIZE | numfmt --to=iec 2>/dev/null || echo $LARGEST_SIZE) байт)"
+    echo "📋 Копируем файл в домашнюю директорию пользователя node..."
+    
+    # Используем dd для надежного копирования больших файлов
+    echo "🔄 Копирование с помощью dd для надежности..."
+    dd if="$LARGEST_DB" of="/home/node/data/database.sqlite" bs=1M 2>/dev/null || {
+        echo "❌ dd не сработал, пробуем обычное копирование..."
+        cp "$LARGEST_DB" "/home/node/data/database.sqlite"
+    }
+    
+    # Проверяем результат копирования
+    COPIED_SIZE=$(stat -c%s "/home/node/data/database.sqlite" 2>/dev/null || echo "0")
+    echo "📊 Размер скопированного файла: $COPIED_SIZE байт"
+    
+    if [ "$COPIED_SIZE" -gt 50000000 ]; then
+        chown node:node "/home/node/data/database.sqlite"
+        chmod 664 "/home/node/data/database.sqlite"
+        echo "✅ База данных успешно скопирована в /home/node/data/database.sqlite"
+        DB_FILE="/home/node/data/database.sqlite"
+    else
+        echo "❌ Копирование неудачно, размер слишком мал: $COPIED_SIZE байт"
+        rm -f "/home/node/data/database.sqlite"
+    fi
+
 
 # Если файл не найден, создаем пустую базу в домашней директории
 if [ ! -f "$DB_FILE" ]; then
