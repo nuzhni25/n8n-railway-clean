@@ -187,7 +187,7 @@ if [ ! -f "$DB_FILE" ] && [ -n "$LARGEST_DB" ] && [ "$LARGEST_SIZE" -gt 50000000
         echo "❌ Копирование неудачно, размер слишком мал: $COPIED_SIZE байт"
         rm -f "/home/node/data/database.sqlite"
     fi
-
+fi
 
 # Если файл не найден, создаем пустую базу в домашней директории
 if [ ! -f "$DB_FILE" ]; then
