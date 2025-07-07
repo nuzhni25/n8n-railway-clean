@@ -187,6 +187,22 @@ export DB_SQLITE_PRAGMA_journal_mode=DELETE
 export DB_SQLITE_PRAGMA_synchronous=NORMAL
 echo "✅ SQLite настроен на journal_mode=DELETE (вместо WAL)"
 
+# ДИАГНОСТИКА: Проверяем содержимое базы данных
+echo "🔍 Диагностика содержимого базы данных..."
+if [ -f "$DB_FILE" ]; then
+    echo "📊 Проверка таблиц в базе данных:"
+    sqlite3 "$DB_FILE" ".tables" 2>/dev/null || echo "❌ Не удалось получить список таблиц"
+    
+    echo "👤 Проверка пользователей в базе данных:"
+    sqlite3 "$DB_FILE" "SELECT COUNT(*) as user_count FROM user;" 2>/dev/null || echo "❌ Таблица user не найдена"
+    
+    echo "🔧 Проверка воркфлоу в базе данных:"
+    sqlite3 "$DB_FILE" "SELECT COUNT(*) as workflow_count FROM workflow_entity;" 2>/dev/null || echo "❌ Таблица workflow_entity не найдена"
+    
+    echo "📋 Размер базы данных:"
+    ls -lh "$DB_FILE"
+fi
+
 # Устанавливаем переменные окружения
 export DB_SQLITE_DATABASE="$DB_FILE"
 export N8N_USER_FOLDER="/home/node/.n8n"
