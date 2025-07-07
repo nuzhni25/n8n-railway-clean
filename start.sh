@@ -1,92 +1,129 @@
 #!/bin/bash
 
-echo "🚀 Starting n8n with Railway Volume database fix..."
+echo "🚀 Starting n8n with Railway Volume database copy..."
 
-# 🎯 CRITICAL FIX: Direct Railway Volume Database Usage
-# Based on research, n8n setup screen issue is caused by:
-# 1. Multiple conflicting database environment variables
-# 2. n8n not recognizing the correct database path
-# 3. Encryption key issues
-# 4. Permission problems with Railway Volume
-# 5. Owner account requirement
+# 🎯 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: КОПИРОВАНИЕ БАЗЫ ИЗ VOLUME 
+# Проблема: база в /app/database.sqlite но n8n не может её использовать из-за разрешений
+# Решение: копируем базу в /home/node/.n8n/database.sqlite где n8n может с ней работать
 
-# 🔧 Railway Volume Permission Fix
-echo "🔧 Fixing Railway Volume permissions..."
+# 🔧 Настройка разрешений для пользователя node
+echo "🔧 Настройка разрешений..."
 if [ "$(whoami)" = "root" ]; then
-    echo "✅ Running as root - can fix permissions"
-    chown -R 1000:1000 /app/ 2>/dev/null || echo "⚠️ Railway permission restriction"
-    chmod -R 755 /app/ 2>/dev/null || echo "⚠️ Railway permission restriction"
-    find /app/ -name "*.sqlite*" -exec chmod 664 {} \; 2>/dev/null || echo "⚠️ SQLite file permission restriction"
+    echo "✅ Работаем от root - можем исправить разрешения"
+    chown -R 1000:1000 /app/ 2>/dev/null || echo "⚠️ Ограничение Railway для /app/"
+    chmod -R 755 /app/ 2>/dev/null || echo "⚠️ Ограничение Railway для /app/"
 else
-    echo "⚠️ Not running as root - user: $(whoami)"
+    echo "⚠️ Не root пользователь: $(whoami)"
 fi
 
-# 🎯 Railway database detection and setup
-echo "🎯 Locating Railway Volume database..."
-RAILWAY_DB="/app/database.sqlite"
+# 🎯 Поиск базы данных в Railway Volume
+echo "🎯 Поиск базы данных в Railway Volume..."
+VOLUME_DB="/app/database.sqlite"
+TARGET_DB="/home/node/.n8n/database.sqlite"
 
-if [ -f "$RAILWAY_DB" ]; then
-    echo "✅ Railway database found: $RAILWAY_DB"
-    ls -la "$RAILWAY_DB"
-    echo "📊 Database size: $(du -h "$RAILWAY_DB" | cut -f1)"
+# 📁 Создание целевой директории
+echo "📁 Создание директории для n8n..."
+mkdir -p /home/node/.n8n
+chown -R 1000:1000 /home/node/.n8n 2>/dev/null || echo "⚠️ Не удалось изменить владельца"
+chmod -R 755 /home/node/.n8n 2>/dev/null || echo "⚠️ Не удалось изменить права"
+
+if [ -f "$VOLUME_DB" ]; then
+    echo "✅ База найдена в Volume: $VOLUME_DB"
+    echo "📊 Размер базы в Volume: $(du -h "$VOLUME_DB" | cut -f1)"
     
-    # 🔍 Database integrity check
-    echo "🔍 Checking database integrity..."
-    if command -v sqlite3 >/dev/null 2>&1; then
-        sqlite3 "$RAILWAY_DB" "PRAGMA integrity_check;" 2>/dev/null || echo "⚠️ Database integrity check failed"
-        echo "📋 Database tables: $(sqlite3 "$RAILWAY_DB" "SELECT count(*) FROM sqlite_master WHERE type='table';" 2>/dev/null || echo "Unknown")"
+    # 🔄 КРИТИЧЕСКИ ВАЖНО: КОПИРОВАНИЕ БАЗЫ
+    echo "🔄 КОПИРОВАНИЕ базы из Volume в рабочую директорию..."
+    echo "   Источник: $VOLUME_DB"
+    echo "   Назначение: $TARGET_DB"
+    
+    # Принудительное копирование
+    cp "$VOLUME_DB" "$TARGET_DB" 2>/dev/null
+    COPY_RESULT=$?
+    
+    if [ $COPY_RESULT -eq 0 ] && [ -f "$TARGET_DB" ]; then
+        echo "✅ База УСПЕШНО скопирована!"
+        echo "📊 Размер скопированной базы: $(du -h "$TARGET_DB" | cut -f1)"
+        
+        # Исправление разрешений скопированной базы
+        chown 1000:1000 "$TARGET_DB" 2>/dev/null || echo "⚠️ Не удалось изменить владельца базы"
+        chmod 664 "$TARGET_DB" 2>/dev/null || echo "⚠️ Не удалось изменить права базы"
+        
+        # Проверка целостности скопированной базы
+        if command -v sqlite3 >/dev/null 2>&1; then
+            TABLE_COUNT=$(sqlite3 "$TARGET_DB" "SELECT COUNT(*) FROM sqlite_master WHERE type='table';" 2>/dev/null || echo "0")
+            echo "📋 Таблиц в скопированной базе: $TABLE_COUNT"
+            
+            if [ "$TABLE_COUNT" -gt 5 ]; then
+                echo "🎉 База содержит данные - копирование успешно!"
+                USE_COPIED_DB="YES"
+            else
+                echo "⚠️ Скопированная база пустая"
+            fi
+        fi
     else
-        echo "⚠️ SQLite3 not available for integrity check"
+        echo "❌ ОШИБКА копирования базы!"
+        echo "Создаём новую базу..."
     fi
 else
-    echo "❌ Railway database not found at $RAILWAY_DB"
-    echo "📁 Creating fallback database in home directory"
-    mkdir -p /home/node/.n8n
-    RAILWAY_DB="/home/node/.n8n/database.sqlite"
+    echo "❌ База НЕ найдена в Volume: $VOLUME_DB"
+    echo "Будет создана новая база..."
 fi
 
-# 🔑 Setting encryption key...
-echo "🔑 Setting encryption key..."
+# 🔑 КРИТИЧЕСКИ ВАЖНО: Постоянный ключ шифрования
+echo "🔑 Установка ключа шифрования..."
+export N8N_ENCRYPTION_KEY="GevJ653kDGJTiemfO4SynmyQEMRwyL/X"
 
-# 🧹 Clearing conflicting database variables...
-echo "🧹 Clearing conflicting database variables..."
+# 🧹 Очистка конфликтующих переменных
+echo "🧹 Очистка переменных базы данных..."
+unset DB_SQLITE_DATABASE
+unset N8N_DATABASE_SQLITE_DATABASE 
+unset N8N_DB_SQLITE_DATABASE
+unset SQLITE_DATABASE
 unset DB_TYPE
-unset N8N_DATABASE_TYPE  
+unset N8N_DATABASE_TYPE
 unset N8N_DB_TYPE
-unset DATABASE_TYPE
 
-# 🎯 Setting essential database configuration...
-echo "🎯 Setting essential database configuration..."
+# 🎯 Настройка ТОЛЬКО необходимых переменных для скопированной базы
+echo "🎯 Настройка базы данных..."
 export DB_TYPE="sqlite"
-export DB_SQLITE_DATABASE="$RAILWAY_DB"
-export N8N_DATABASE_SQLITE_DATABASE="$RAILWAY_DB"
-export N8N_USER_FOLDER="/app/.n8n"
-export N8N_ENCRYPTION_KEY="HxJKwJEJIamRbyQVmqnQtIenvbF04sNgUK7temfD04tQU7"
+export DB_SQLITE_DATABASE="$TARGET_DB"
+export N8N_DATABASE_SQLITE_DATABASE="$TARGET_DB"
+export N8N_USER_FOLDER="/home/node/.n8n"
 
-# 🎯 CRITICAL: Disable owner account requirement to use existing data
+# 🚫 ОТКЛЮЧЕНИЕ ЭКРАНА НАСТРОЙКИ
+echo "🚫 Отключение экрана настройки..."
 export N8N_OWNER_DISABLED="true"
+export N8N_DISABLE_SETUP_UI="true"
 
-# 🎯 Optimizing SQLite for Railway environment...
-echo "🎯 Optimizing SQLite for Railway environment..."
+# ⚡ Оптимизация SQLite
+echo "⚡ Оптимизация SQLite..."
 export N8N_DATABASE_SQLITE_ENABLE_WAL="false"
 export N8N_DATABASE_SQLITE_VACUUM_ON_STARTUP="false"
 
-# 🔧 Configuring user folder...
-echo "🔧 Configuring user folder..."
-mkdir -p /app/.n8n
-chown -R 1000:1000 /app/.n8n 2>/dev/null || echo "⚠️ n8n folder permission adjustment skipped"
+# 📊 Финальная проверка перед запуском
+echo "📊 Финальная проверка..."
+echo "🗃️ Путь к базе: $DB_SQLITE_DATABASE"
+echo "📁 База существует: $([ -f "$DB_SQLITE_DATABASE" ] && echo "✅ ДА" || echo "❌ НЕТ")"
+echo "📊 База читаемая: $([ -r "$DB_SQLITE_DATABASE" ] && echo "✅ ДА" || echo "❌ НЕТ")"
 
-# 📊 Final verification before starting n8n...
-echo "📊 Final verification before starting n8n..."
-echo "🗃️ Database path: $DB_SQLITE_DATABASE"
-echo "📁 Database exists: $([ -f "$DB_SQLITE_DATABASE" ] && echo "✅ YES" || echo "❌ NO")"
-echo "📊 Database readable: $([ -r "$DB_SQLITE_DATABASE" ] && echo "✅ YES" || echo "❌ NO")"
+# 🔄 ОЖИДАНИЕ ПОЛНОГО КОПИРОВАНИЯ
+echo "🔄 Проверяем что база полностью скопировалась..."
+if [ -f "$DB_SQLITE_DATABASE" ]; then
+    FINAL_SIZE=$(stat -c%s "$DB_SQLITE_DATABASE" 2>/dev/null || echo "0")
+    echo "📊 Финальный размер базы: $FINAL_SIZE байт"
+    
+    if [ "$FINAL_SIZE" -gt 1000000 ]; then
+        echo "✅ База достаточно большая - готова к использованию"
+    else
+        echo "⚠️ База маленькая - возможно копирование не завершено"
+        sleep 2
+    fi
+fi
 
-# 🚀 Starting n8n with focused database configuration...
-echo "🚀 Starting n8n with focused database configuration..."
-
-# Permissions: 0644 for n8n settings file /home/node/.n8n/.n8n/config are too wide. This is ignored for now, but in the future n8n
-# will attempt to change the permissions automatically. To automatically enforce correct permissions now set
-# N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true (recommended), or turn this check off set N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false.
+# 🚀 ЗАПУСК N8N
+echo "🚀 Запуск n8n с правильной базой данных..."
+echo "   Используется база: $DB_SQLITE_DATABASE"
+echo "   Ключ шифрования установлен"
+echo "   Экран настройки отключен"
 
 exec n8n start 
